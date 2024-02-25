@@ -12,23 +12,23 @@ namespace MTCG.Models {
     internal class Trade {
 
         //Properties
-        public Guid TradeID { get; set; }
-        public Guid TradingCard { get; set; }
-        public string? CardType { get; set; }
-        public double CardStats { get; set; }
+        public Guid Id { get; set; }
+        public Guid CardToTrade { get; set; }
+        public string? Type { get; set; }
+        public double MinimumDamage { get; set; }
 
         //Methods
         public void CreateTrade(HttpSvrEventArgs e, Token userToken) {
             try {
-                var connectionString = "Host=localhost; Username=user1; Password=userpwd1; Database=swen1db";
+                string connectionString = ConfigurationManager.GetConnectionString("DefaultConnection");
                 using var conn = new NpgsqlConnection(connectionString);
                 conn.Open();
 
                 string replyString = "Trade created successfully.\n";
-                using (var cmd = new NpgsqlCommand("SELECT trade.tradeid, cards.name, cards.damage, trade.type, trade.mindamage FROM trade JOIN cards ON trade.tradingcard = cards.id", conn)) {
+                using (var cmd = new NpgsqlCommand("SELECT trade.id, cards.name, cards.damage, trade.type, trade.mindamage FROM trade JOIN cards ON trade.tradingcard = cards.id", conn)) {
                     using (var reader = cmd.ExecuteReader()) {
                         while (reader.Read()) {
-                            replyString += "TradeID: " + reader.GetGuid(0) + " - Cardname: " + reader.GetString(1) + " - Damage: " + reader.GetDouble(2).ToString("0.0") + " - WantedType: " + reader.GetString(3) + " - MinDamage: " + reader.GetDouble(4).ToString("0.0") + "\n";
+                            replyString += "Id: " + reader.GetGuid(0) + " - Cardname: " + reader.GetString(1) + " - Damage: " + reader.GetDouble(2).ToString("0.0") + " - WantedType: " + reader.GetString(3) + " - MinDamage: " + reader.GetDouble(4).ToString("0.0") + "\n";
                         }
                     }
 
@@ -40,30 +40,34 @@ namespace MTCG.Models {
         }
 
         public void PostTrade(HttpSvrEventArgs e, Token userToken) {
+            if (!userToken.IsValid()) {
+                e.Reply(400, "Invalid token. User not logged in.");
+                return;
+            }
+
             try {
-                var trade = JsonSerializer.Deserialize<Trade>(e.Payload);
-                if (trade == null) {
+                var newTrade = JsonSerializer.Deserialize<Trade>(e.Payload);
+                if (newTrade == null) {
                     e.Reply(400, "Malformed Request to post trade.");
                     return;
                 }
 
-                Trade? newTrade = JsonSerializer.Deserialize<Trade>(e.Payload);
-
-                var connectionString = "Host=localhost; Username=user1; Password=userpwd1; Database=swen1db";
+                string connectionString = ConfigurationManager.GetConnectionString("DefaultConnection");
                 using var conn = new NpgsqlConnection(connectionString);
                 conn.Open();
 
                 int postedTrade = 0;
 
-                using (var cmd = new NpgsqlCommand("INSERT INTO trade (tradeid, tradingcard, type, mindamage) SELECT (@p1, @p2, @p3, @p4) WHERE EXISTS (SELECT 1 FROM cards WHERE id = (@p2) and unsername = (@p5))", conn)) {
-                    cmd.Parameters.AddWithValue("@p1", newTrade.TradeID);
-                    cmd.Parameters.AddWithValue("@p2", newTrade.TradingCard);
-                    cmd.Parameters.AddWithValue("@p3", newTrade.CardType);
-                    cmd.Parameters.AddWithValue("@p4", newTrade.CardStats);
-                    cmd.Parameters.AddWithValue("@p5", userToken.LoggedInUser);
-                    cmd.ExecuteNonQuery();
+                using (var cmd = new NpgsqlCommand("INSERT INTO trade (id, tradingcard, type, mindamage) SELECT @p1, @p2, @p3, @p4 WHERE EXISTS (SELECT 1 FROM cards WHERE id = @p2 AND username = @p5)", conn)) {
+                    cmd.Parameters.AddWithValue("@p1", newTrade.Id);
+                    cmd.Parameters.AddWithValue("@p2", newTrade.CardToTrade);
+                    cmd.Parameters.AddWithValue("@p3", newTrade.Type ?? "");
+                    cmd.Parameters.AddWithValue("@p4", newTrade.MinimumDamage);
+                    cmd.Parameters.AddWithValue("@p5", userToken.LoggedInUser!);
+                    postedTrade = cmd.ExecuteNonQuery();
                 }
                 if(postedTrade == 0) {
+
                     e.Reply(400, "Trade not posted.");
                     return;
                 }
@@ -74,6 +78,11 @@ namespace MTCG.Models {
         }   
 
         public void TradeCards(HttpSvrEventArgs e, Token userToken) {
+            if (!userToken.IsValid()) {
+                e.Reply(400, "Invalid token. User not logged in.");
+                return;
+            }
+
             try {
                 var trade = JsonSerializer.Deserialize<Trade>(e.Payload);
                 if (trade == null) {
@@ -83,22 +92,22 @@ namespace MTCG.Models {
 
                 string[] pathId = e.Path.Split("/");
 
-                var connectionString = "Host=localhost; Username=user1; Password=userpwd1; Database=swen1db";
+                string connectionString = ConfigurationManager.GetConnectionString("DefaultConnection");
                 using var conn = new NpgsqlConnection(connectionString);
                 conn.Open();
 
                 Trade? tradeCards = new Trade();
-                tradeCards.TradeID = Guid.Parse(pathId[2]);
+                tradeCards.Id = Guid.Parse(pathId[2]);
                 string usernameTrade = "";
 
-                using (var cmd = new NpgsqlCommand("SELECT cards.username, trade.type, trade.mindamage, trade.tradingcard FROM trade JOIN cards ON trade.tradingcard = cards.id WHERE trade.tradeid = (@p1)", conn)) {
-                    cmd.Parameters.AddWithValue("@p1", trade.TradeID);
+                using (var cmd = new NpgsqlCommand("SELECT cards.username, trade.type, trade.mindamage, trade.tradingcard FROM trade JOIN cards ON trade.tradingcard = cards.id WHERE trade.Id = (@p1)", conn)) {
+                    cmd.Parameters.AddWithValue("@p1", trade.Id);
                     using (var reader = cmd.ExecuteReader()) {
                         if (reader.Read()) {
                             usernameTrade = reader.GetString(0);
-                            tradeCards.TradingCard = reader.GetGuid(1);
-                            tradeCards.CardType = reader.GetString(2);
-                            tradeCards.CardStats = reader.GetDouble(3);
+                            tradeCards.Type = reader.GetString(1);
+                            tradeCards.MinimumDamage = reader.GetDouble(2);
+                            tradeCards.CardToTrade = reader.GetGuid(3);
                         } else {
                             e.Reply(400, "Trade not found.");
                         }
@@ -112,10 +121,10 @@ namespace MTCG.Models {
 
                 Card offeredCard = new Card();
                 using (var cmd = new NpgsqlCommand("SELECT cards.id, cards.name, cards.damage FROM cards WHERE cards.id = (@p1)", conn)) {
-                    cmd.Parameters.AddWithValue("@p1", offeredCard.CardID);
+                    cmd.Parameters.AddWithValue("@p1", offeredCard.Id);
                     using (var reader = cmd.ExecuteReader()) {
                         if (reader.Read()) {
-                            offeredCard.CardID = reader.GetGuid(0);
+                            offeredCard.Id = reader.GetGuid(0);
                             offeredCard.Name = reader.GetString(1);
                             offeredCard.Damage = reader.GetDouble(2);
                         } else {
@@ -125,59 +134,54 @@ namespace MTCG.Models {
                 }
 
                 offeredCard = offeredCard.GetCardStats(offeredCard);
-                bool match = false;
 
                 // Dynamic trade query
-                if (offeredCard.Species == Card.SpeciesCard.Spell && tradeCards.CardType.Equals("spell")) {
-                    match = true;
-                }
-                else if (offeredCard.Species != Card.SpeciesCard.Spell && tradeCards.CardType.Equals("monster")) {
-                    match = true;
-                }
-                else if ((offeredCard.Damage <= tradeCards.CardStats) && match) {
-                    match = true;
-                }
-                if (!match) {
-                    e.Reply(400, "Card does not match the trade.");
-                    return;
-                }
+                bool isTypeMatch = (offeredCard.Species == Card.SpeciesCard.Spell && tradeCards.Type == "spell") ||
+                                   (offeredCard.Species != Card.SpeciesCard.Spell && tradeCards.Type == "monster");
+
+                bool isDamageMatch = offeredCard.Damage >= tradeCards.MinimumDamage;
 
                 // Proceed with the trade
-                using(var cmd = new NpgsqlCommand("UPDATE cards SET username = (@p1) WHERE id = (@p2)", conn)) {
-                    cmd.Parameters.AddWithValue("@p1", userToken.LoggedInUser);
-                    cmd.Parameters.AddWithValue("@p2", trade.TradingCard);
+                using (var cmd = new NpgsqlCommand("UPDATE cards SET username = (@p1) WHERE id = (@p2)", conn)) {
+                    cmd.Parameters.AddWithValue("@p1", userToken.LoggedInUser!);
+                    cmd.Parameters.AddWithValue("@p2", trade.CardToTrade);
                     cmd.ExecuteNonQuery();
                 }
                 using(var cmd = new NpgsqlCommand("UPDATE cards SET username = (@p1) WHERE id = (@p2)", conn)) {
                     cmd.Parameters.AddWithValue("@p1", usernameTrade);
-                    cmd.Parameters.AddWithValue("@p2", offeredCard.CardID);
+                    cmd.Parameters.AddWithValue("@p2", offeredCard.Id);
                     cmd.ExecuteNonQuery();
                 }
-                using(var cmd = new NpgsqlCommand("DELETE FROM trade WHERE tradeid = (@p1)", conn)) {
-                    cmd.Parameters.AddWithValue("@p1", trade.TradeID);
+                using(var cmd = new NpgsqlCommand("DELETE FROM trade WHERE Id = (@p1)", conn)) {
+                    cmd.Parameters.AddWithValue("@p1", trade.Id);
                     cmd.ExecuteNonQuery();
                 }
                 e.Reply(200, "Trade successful.");
             } catch {
-                e.Reply(400, "Error occurred while trading cards.");
+                e.Reply(400, "Card does not match the trade requirements.");
             }
         }
 
         public void DeleteTrade(HttpSvrEventArgs e, Token userToken) {
+            if (!userToken.IsValid()) {
+                e.Reply(400, "Invalid token. User not logged in.");
+                return;
+            }
+
             try {
                 string[] pathId = e.Path.Split("/");
                 var trade = new Trade();
-                trade.TradeID = Guid.Parse(pathId[2]);
+                trade.Id = Guid.Parse(pathId[2]);
 
-                var connectionString = "Host=localhost; Username=user1; Password=userpwd1; Database=swen1db";
+                string connectionString = ConfigurationManager.GetConnectionString("DefaultConnection");
                 using var conn = new NpgsqlConnection(connectionString);
                 conn.Open();
 
                 int deletedTrade = 0;
 
-                using (var cmd = new NpgsqlCommand("DELETE FROM trade WHERE (@p1) IN (SELECT tradeid FROM trade JOIN cards ON trade.tradingcard, = cards.id WHERE cards.username = (@p2))", conn)) {
-                    cmd.Parameters.AddWithValue("@p2", userToken.LoggedInUser);
-                    cmd.Parameters.AddWithValue("@p1", trade.TradeID);
+                using (var cmd = new NpgsqlCommand("DELETE FROM trade WHERE (@p1) IN (SELECT trade.id FROM trade JOIN cards ON trade.tradingcard = cards.id WHERE cards.username = (@p2))", conn)) {
+                    cmd.Parameters.AddWithValue("@p2", userToken.LoggedInUser!);
+                    cmd.Parameters.AddWithValue("@p1", trade.Id);
                     deletedTrade = cmd.ExecuteNonQuery();
                 }
                 if(deletedTrade == 0) {
@@ -186,7 +190,7 @@ namespace MTCG.Models {
                 }
                 e.Reply(200, "Trade deleted successfully.");
             } catch {
-                e.Reply(400, "Error occurred while deleting trade.");
+                e.Reply(400, "Error occured while deleting Trade");
             }
         }
 

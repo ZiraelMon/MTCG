@@ -1,5 +1,3 @@
--- db config based on the moodle example (db name swen1db instead of swe1user): 
--- docker command: docker run --name swe1db -e POSTGRES_USER=swe1user -e POSTGRES_PASSWORD=swe1pw -e POSTGRES_DB=swe1db -p 5432:5432 postgres
 
 CREATE TABLE "cards" (
   "id" uuid PRIMARY KEY,
@@ -10,7 +8,7 @@ CREATE TABLE "cards" (
   "username" varchar
 );
 
-CREATE TABLE "user" (
+CREATE TABLE "users" (
   "username" varchar PRIMARY KEY,
   "password" varchar,
   "coins" int,
@@ -37,13 +35,13 @@ CREATE TABLE "stats" (
 );
 
 CREATE TABLE "trade" (
-  "Id" uuid PRIMARY KEY,
+  "id" uuid PRIMARY KEY,
   "tradingcard" uuid,
   "type" varchar,
-  "mindamage" double
+  "mindamage" float
 );
 
-ALTER TABLE "cards" ADD FOREIGN KEY ("username") REFERENCES "user" ("username");
+ALTER TABLE "cards" ADD FOREIGN KEY ("username") REFERENCES "users" ("username");
 
 ALTER TABLE "carddeck" ADD FOREIGN KEY ("card1") REFERENCES "cards" ("id");
 
@@ -55,6 +53,6 @@ ALTER TABLE "carddeck" ADD FOREIGN KEY ("card4") REFERENCES "cards" ("id");
 
 ALTER TABLE "carddeck" ADD FOREIGN KEY ("card5") REFERENCES "cards" ("id");
 
-ALTER TABLE "stats" ADD FOREIGN KEY ("username") REFERENCES "user" ("username");
+ALTER TABLE "stats" ADD FOREIGN KEY ("username") REFERENCES "users" ("username");
 
 ALTER TABLE "trade" ADD FOREIGN KEY ("tradingcard") REFERENCES "cards" ("id");

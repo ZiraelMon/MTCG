@@ -15,6 +15,10 @@ namespace MTCG.Server
 
         public string? LoggedInUser { get; set; }
 
+
+        public bool IsValid() {
+            return LoggedInUser != null;
+        }
         public void AuthenticateUser(HttpSvrEventArgs e) {
             var index = Array.FindIndex(e.Headers, x => x.Name.Contains("Authorization"));
             if (index >= 0) {
@@ -23,15 +27,15 @@ namespace MTCG.Server
                 string passedUsername = tokenName[0];
                 bool userExists = false;
                 try {
-                    var connectionString = "Host=localhost; Username=swe1user; Password=swe1pw; Database=swe1db";
+                    string connectionString = ConfigurationManager.GetConnectionString("DefaultConnection");
                     using var conn = new NpgsqlConnection(connectionString);
                     conn.Open();
 
                     // Check if user exists
-                    using (var cmd = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM users WHERE username = @p1)", conn)) {
+                    using (var cmd = new NpgsqlCommand("SELECT 1 FROM users WHERE username = (@p1)", conn)) {
                         cmd.Parameters.AddWithValue("@p1", passedUsername);
                         var result = cmd.ExecuteScalar();
-                        userExists = result != null && (bool)result;
+                        userExists = result != null && Convert.ToInt32(result) > 0;
                     }
 
                     if (userExists) {

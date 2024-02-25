@@ -28,11 +28,11 @@ public class Card {
             Dragon,
             Ork,
             Kraken,
-            Wizzard,
+            Wizard,
             Spell,
         }
 
-        public Guid CardID { get; set; }
+        public Guid Id { get; set; }
         public string Name { get; set; } = "DefaultName"; // Default value to avoid "null" or "empty" name 
         public double Damage { get; set; }
         public ElementCard Element { get; set; }
@@ -42,7 +42,7 @@ public class Card {
             try {
                 List<Card> carddeck = JsonSerializer.Deserialize<List<Card>>(e.Payload) ?? new List<Card>();
 
-                var connectionString = "Host=localhost; Username=user1; Password=userpwd1; Database=swen1db";
+                string connectionString = ConfigurationManager.GetConnectionString("DefaultConnection");
                 using var conn = new NpgsqlConnection(connectionString);
                 conn.Open();
 
@@ -56,19 +56,22 @@ public class Card {
                 int i = 0;
 
                 foreach (Card card in carddeck) {
-                    var cmdText = "INSERT INTO cards (id, name, damage, element, species) VALUES (@p1, @p2, @p3, @p4, @p5)";
+                    var cmdText = "INSERT INTO cards (id, name, damage, deck, trade, username) VALUES ((@p1), (@p2), (@p3), (@p4), (@p5), (@p6))";
                     using (var cmd = new NpgsqlCommand(cmdText, conn, transaction)) {
-                        cmd.Parameters.AddWithValue("@p1", card.CardID);
+                        cmd.Parameters.AddWithValue("@p1", card.Id);
                         cmd.Parameters.AddWithValue("@p2", card.Name);
                         cmd.Parameters.AddWithValue("@p3", card.Damage);
-                        cmd.Parameters.AddWithValue("@p4", card.Element.ToString());
-                        cmd.Parameters.AddWithValue("@p5", card.Species.ToString());
+                        cmd.Parameters.AddWithValue("@p4", false);
+                        cmd.Parameters.AddWithValue("@p5", false);
+                        cmd.Parameters.AddWithValue("@p6", DBNull.Value);
                         cmd.ExecuteNonQuery();
                     }
-                    carddeckIds[i++] = card.CardID;
+                    carddeckIds[i] = card.Id;
+                    i++;
+                    
                 }
 
-                var packageCmdText = "INSERT INTO packages (card1, card2, card3, card4, card5) VALUES (@p1, @p2, @p3, @p4, @p5)";
+                var packageCmdText = "INSERT INTO carddeck (card1, card2, card3, card4, card5) VALUES (@p1, @p2, @p3, @p4, @p5)";
                 using (var cmd = new NpgsqlCommand(packageCmdText, conn, transaction)) {
                     for (int j = 0; j < carddeckIds.Length; j++) {
                         cmd.Parameters.AddWithValue($"@p{j + 1}", carddeckIds[j]);
@@ -93,7 +96,6 @@ public class Card {
         }
 
         public Card GetCardStats(Card card) {
-            // Assuming 'card' already has 'Name' set and you need to parse it to set 'Element' and 'Species'
             try {
                 string[] parts = Regex.Split(card.Name, "(?=[A-Z])");
 
@@ -103,7 +105,7 @@ public class Card {
                 }
                 else {
                     card.Species = Enum.Parse<SpeciesCard>(parts[1], ignoreCase: true);
-                    card.Element = card.Species != SpeciesCard.Spell ? ElementCard.Regular : 0; // Assuming default or specific logic for Spells
+                    card.Element = card.Species != SpeciesCard.Spell ? ElementCard.Regular : 0;
                 }
                 return card;
             }

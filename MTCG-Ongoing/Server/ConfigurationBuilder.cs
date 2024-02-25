@@ -14,7 +14,7 @@ namespace MTCG.Server {
         }
 
         public static string GetConnectionString(string name) {
-            return Configuration.GetConnectionString(name);
+            return Configuration.GetConnectionString(name) ?? "DefaultConnectionString";
         }
     }
 }
