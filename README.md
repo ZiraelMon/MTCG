@@ -20,8 +20,11 @@ Carddeck: Verifies that updating a deck with an incorrect size correctly trigger
 
 Battle: Evaluates damage calculation functions and special interactions between cards, including the dynamics of changing and removing cards during a battle.
 
-# Tracking
-I have to admit that I neglected tracking a bit and sometimes worked on the code spontaneously, so I didn't track myself regularly. Unfortunately, I also created the repository on Github far too late. But I would say that I worked ~80 hours on the project. It also took me a while to get used to Visual Studio and C# and to understand the specification/requirements of the project to draw a draft and start with the structure in VS.
+## Design
+The design is kept very simple and is mainly focused on the curl script. The decision for the simple design is that it should save time, while the logic, database and server connection were more essential for the project.
+
+## Tracking
+I have to admit that I neglected tracking a bit and sometimes worked on the code spontaneously, so I didn't track myself regularly. Unfortunately, I also created the repository on Github far too late. But I would say that I worked ~90 hours on the project. It also took me a while to get used to Visual Studio and C# and to understand the specification/requirements of the project to draw a draft and start with the structure in VS.
 
 ## Lessons Learned
 I should have started sooner with the Unittests, as recommended in the lessons. The problem was that I was not yet familiar with Unit-Testing and it was therefore all the more difficult to recognize which ones were essential for my code. I also kept changing my methods, so that I would have had to adapt the test cases again and again. 
