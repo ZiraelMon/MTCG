@@ -109,8 +109,11 @@ public class Card {
                 }
                 return card;
             }
-            catch (Exception ex) {
-                throw new Exception("Error parsing card stats: " + ex.Message);
+            //catch (Exception ex) {
+            //    throw new Exception("Error parsing card stats: " + ex.Message);
+            //}
+            catch (ArgumentException) {
+                throw;
             }
         }
 

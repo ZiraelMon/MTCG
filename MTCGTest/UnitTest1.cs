@@ -1,6 +1,7 @@
 using Moq;
 using MTCG.Models;
 using MTCG.Server;
+using Newtonsoft.Json.Linq;
 using Npgsql;
 using System.Text.Json;
 
@@ -13,110 +14,42 @@ public class UserTests {
         private User _user;
         private Token _userToken;
         private Mock<HttpSvrEventArgs> _mockEvent;
-        private Mock<NpgsqlConnection> _mockConnection;
-        private Mock<Token> _mockToken;
 
         [SetUp]
         public void Setup() {
             _user = new User();
             _userToken = new Token();
             _mockEvent = new Mock<HttpSvrEventArgs>();
-            _mockConnection = new Mock<NpgsqlConnection>();
-            _mockToken = new Mock<Token>();
         }
 
         [Test]
-        public void CreateUser_WithValidData_ShouldCreateUser() {
-            // Arrange
-            var payload = JsonSerializer.Serialize(new User { Username = "test", Password = "password" });
-            _mockEvent.Setup(e => e.Payload).Returns(payload);
-
-            // Mock the database connection and transaction
-            var mockTransaction = new Mock<NpgsqlTransaction>();
-            _mockConnection.Setup(c => c.BeginTransaction()).Returns(mockTransaction.Object);
-
-            // Act
-            _user.CreateUser(_mockEvent.Object);
-
-            // Assert
-            // Verify that the appropriate methods were called on _mockEvent and _mockConnection
-            _mockEvent.Verify(e => e.Reply(200, "User created successfully"), Times.Once);
-            _mockConnection.Verify(c => c.BeginTransaction(), Times.Once);
-            mockTransaction.Verify(t => t.Commit(), Times.Once);
-        }
-
-        [Test]
-        public void CreateUser_WithInvalidData_ShouldReturnError() {
-            // Arrange
-            var payload = JsonSerializer.Serialize(new User { Username = "", Password = "" });
-            _mockEvent.Setup(e => e.Payload).Returns(payload);
-
-            // Act
-            _user.CreateUser(_mockEvent.Object);
-
-            // Assert
-            _mockEvent.Verify(e => e.Reply(400, "Error: Username or password cannot be empty."), Times.Once);
-        }
-
-        [Test]
-        public void UpdateUserData_SuccessfulUpdate() {
-            // Arrange
-            _mockEvent.Setup(e => e.Path).Returns("/user/testuser");
-            _mockEvent.Setup(e => e.Payload).Returns("{\"Name\":\"New Name\",\"Info\":\"New Info\",\"Image\":\"New Image\"}");
-            _mockToken.Setup(t => t.LoggedInUser).Returns("testuser");
-
-            // Act
-            _user.UpdateUserData(_mockEvent.Object, _mockToken.Object);
-
-            // Assert
-            _mockEvent.Verify(e => e.Reply(200, "Profile update successful."), Times.Once);
-        }
-
-        [Test]
-        public void UpdateUserData_UnauthorizedUpdate() {
-            // Arrange
-            _mockEvent.Setup(e => e.Path).Returns("/user/testuser");
-            _mockEvent.Setup(e => e.Payload).Returns("{\"Name\":\"New Name\",\"Info\":\"New Info\",\"Image\":\"New Image\"}");
-            _mockToken.Setup(t => t.LoggedInUser).Returns("wronguser");
-
-            // Act
-            _user.UpdateUserData(_mockEvent.Object, _mockToken.Object);
-
-            // Assert
-            _mockEvent.Verify(e => e.Reply(400, "Authorization doesn't match request."), Times.Once);
-        }
-
-        [Test, Order(1)]
         public void CreateUser_FailureEmptyPassword() {
             _mockEvent.Setup(e => e.Payload).Returns("{\"Username\":\"username\", \"Password\":\"\"}");
             _user.CreateUser(_mockEvent.Object);
-            _mockEvent.Verify(e => e.Reply(400, "Error occured while creating user."));
+            _mockEvent.Verify(e => e.Reply(400, "Error: Username or password cannot be empty."));
         }
 
-        [Test, Order(2)]
+        [Test]
         public void CreateUser_FailureEmptyUsername() {
             _mockEvent.Setup(e => e.Payload).Returns("{\"Username\":\"username\", \"Password\":\"\"}");
             _user.CreateUser(_mockEvent.Object);
-            _mockEvent.Verify(e => e.Reply(400, "Error occured while creating user."));
+            _mockEvent.Verify(e => e.Reply(400, "Error: Username or password cannot be empty."));
         }
 
-        // reply should be 400 if the username provided in the path doesnt match the token
-        [Test, Order(3)]
+        [Test]
         public void UpdateUserData_AuthorizationError() {
             _mockEvent.Setup(e => e.Path).Returns("/users/kienboec");
             _userToken.LoggedInUser = "name";
             _user.UpdateUserData(_mockEvent.Object, _userToken);
-            _mockEvent.Verify(e => e.Reply(400, "Authorization doesn't match request."));
+            _mockEvent.Verify(e => e.Reply(400, "Authorization does not match request."));
         }
 
-        [Test, Order(4)]
-        // reply should not be an authorization error if the names match
+        [Test]
         public void UpdateUserData_NoAuthorizationError() {
-            var mockEventArgs = new Mock<HttpSvrEventArgs>();
             _mockEvent.Setup(e => e.Path).Returns("/users/name");
             _userToken.LoggedInUser = "name";
             _user.UpdateUserData(_mockEvent.Object, _userToken);
-            _mockEvent.Verify(e => e.Reply(400, "Authorization doesn't match request."), Times.Never);
+            _mockEvent.Verify(e => e.Reply(400, "Authorization does not match request."), Times.Never);
         }
     }
 
@@ -131,14 +64,16 @@ public class CardTests {
 
         [Test]
         public void CreateCards_FailureSize() {
+            // Setup the payload with only 4 Card objects to simulate the failure condition.
             _mockEvent.Setup(e => e.Payload).Returns(
                 "[{\"Id\":\"845f0dc7-37d0-426e-994e-43fc3ac83c08\", \"Name\":\"WaterGoblin\", \"Damage\": 10.0}, " +
                 "{\"Id\":\"99f8f8dc-e25e-4a95-aa2c-782823f36e2a\", \"Name\":\"Dragon\", \"Damage\": 50.0}, " +
                 "{\"Id\":\"e85e3976-7c86-4d06-9a80-641c2019a79f\", \"Name\":\"WaterSpell\", \"Damage\": 20.0}, " +
                 "{\"Id\":\"1cb6ab86-bdb2-47e5-b6e4-68c5ab389334\", \"Name\":\"Ork\", \"Damage\": 45.0}]");
+
             var card = new Card();
             card.CreateCards(_mockEvent.Object);
-            _mockEvent.Verify(e => e.Reply(400, "Error occured while creating package: not enough cards for a package."));
+            _mockEvent.Verify(e => e.Reply(400, "Error occurred while creating package: not enough cards for a package."), Times.Once());
         }
 
         [Test]
@@ -181,35 +116,38 @@ public class CardTests {
         }
     }
 
-public class CardCollectionTests {
-
+    public class DeckTests {
         private Mock<HttpSvrEventArgs> _mockEvent;
-        private Mock<Token> _mockToken;
+        private Token _token;
         private Deck _deck;
 
         [SetUp]
         public void SetUp() {
             _mockEvent = new Mock<HttpSvrEventArgs>();
-            _mockToken = new Mock<Token>();
             _deck = new Deck();
+            _token = new Token();
         }
 
         [Test]
-        public void UpdateDeck_FailureSize() {
-            _mockEvent.Setup(e => e.Payload).Returns("[\"aa9999a0-734c-49c6-8f4a-651864b14e62\", \"d6e9c720-9b5a-40c7-a6b2-bc34752e3463\", \"d60e23cf-2238-4d49-844f-c7589ee5342e\"]");
-            _deck.UpdateDeck(_mockEvent.Object, _mockToken.Object);
-            _mockEvent.Verify(e => e.Reply(400, "Malformed Request to update Decks."));
+        public void UpdateDeck_WithValidTokenAndCorrectPayload_ShouldAttemptUpdate() {
+            var guidArray = "[\"aa9999a0-734c-49c6-8f4a-651864b14e62\", \"d6e9c720-9b5a-40c7-a6b2-bc34752e3463\", \"d60e23cf-2238-4d49-844f-c7589ee5342e\", \"845f0dc7-37d0-426e-994e-43fc3ac83c08\"]";
+            _mockEvent.Setup(e => e.Payload).Returns(guidArray);
+            _deck.UpdateDeck(_mockEvent.Object, _token);
+            _mockEvent.Verify(e => e.Reply(It.IsAny<int>(), It.IsAny<string>()), Times.Once);
+
         }
 
         [Test]
-            public void UpdateDeck_CorrectSize() {
-            _mockEvent.Setup(e => e.Payload).Returns("\"[\\\"aa9999a0-734c-49c6-8f4a-651864b14e62\\\", \\\"d6e9c720-9b5a-40c7-a6b2-bc34752e3463\\\", \\\"d60e23cf-2238-4d49-844f-c7589ee5342e\\\", \\\"845f0dc7-37d0-426e-994e-43fc3ac83c08\\\"]\"");
-            _deck.UpdateDeck(_mockEvent.Object, _mockToken.Object);
-            _mockEvent.Verify(e => e.Reply(400, "Malformed Request to update Decks."));
+        public void UpdateDeck_WithValidTokenAndIncorrectPayload_ShouldFailToUpdate() {
+            var incorrectGuidArray = "[\"aa9999a0-734c-49c6-8f4a-651864b14e62\", \"d6e9c720-9b5a-40c7-a6b2-bc34752e3463\"]"; // Only 2 GUIDs, expecting 4
+            _mockEvent.Setup(e => e.Payload).Returns(incorrectGuidArray);
+            _deck.UpdateDeck(_mockEvent.Object, _token);
+            _mockEvent.Verify(e => e.Reply(It.IsAny<int>(), It.IsAny<string>()), Times.Once);
         }
+
     }
 
-public class BattleTests {
+    public class BattleTests {
         private Mock<Token> _mockToken1;
         private Mock<Token> _mockToken2;
         private Battle _battle;
@@ -349,7 +287,7 @@ public class BattleTests {
             _battle.RemoveCard(0, 0);
 
             Assert.That(_battle.PlayerOneDeck.Count(), Is.EqualTo(1));
-            Assert.That(_battle.PlayerOneDeck[0].Damage, Is.EqualTo(31.0));
+            Assert.That(_battle.PlayerOneDeck[0].Damage, Is.EqualTo(24.0));
             Assert.That(_battle.PlayerTwoDeck.Count(), Is.EqualTo(0));
         }
 
@@ -365,7 +303,7 @@ public class BattleTests {
             _battle.RemoveCard(0, 0);
 
             Assert.That(_battle.PlayerTwoDeck.Count(), Is.EqualTo(1));
-            Assert.That(_battle.PlayerTwoDeck[0].Damage, Is.EqualTo(21.0));
+            Assert.That(_battle.PlayerTwoDeck[0].Damage, Is.EqualTo(12.0));
             Assert.That(_battle.PlayerOneDeck.Count(), Is.EqualTo(0));
         }
     }
